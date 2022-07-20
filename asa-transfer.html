@@ -253,7 +253,20 @@
     window.addEventListener("load", function () {
       checkForAlgosigner(); // see algosignerutils.js
     });
+    function getAlgodClient(){
+      const algodServer = 'https://testnet-algorand.api.purestake.io/ps2';
 
+      // constants to use for the Algod client
+      const token = {
+        'X-API-Key': `FILL_ME`
+      }
+      const algodClient = new algosdk.Algodv2(token, algodServer, '');
+
+      algodClient.status().do()
+              .then(d => console.log(d['last-round']))
+              .catch(e =>  console.error(e));
+      return algodClient;
+    }
     /**
      * Fetches accounts belonging to the current AlgoSigner wallet
      */
@@ -341,28 +354,36 @@
 
       AlgoSigner.connect()
         // fetch current parameters
-        .then(() => AlgoSigner.algod({
-          ledger: 'TestNet',
-          path: '/v2/transactions/params'
-        }))
+          .then(() => {
+            console.log('get algod');
+            const algodClient = getAlgodClient();
+            console.log('get param');
+            return algodClient.getTransactionParams().do()
+          })
         // sign new opt-in transaction
-        .then((txParams) => AlgoSigner.sign({
-          assetIndex: assetId,
-          from: optInAccount,
-          amount: 0,
-          to: optInAccount,
-          type: 'axfer', // ASA Transfer (axfer)
-          fee: txParams['min-fee'],
-          firstRound: txParams['last-round'],
-          lastRound: txParams['last-round'] + 1000,
-          genesisID: txParams['genesis-id'],
-          genesisHash: txParams['genesis-hash'],
-          flatFee: true
-        }))
+        .then((suggestedParams) => {
+          let sdkTx = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+            assetIndex: assetId,
+            from: optInAccount,
+            amount: 0,
+            to: optInAccount,
+            suggestedParams
+          });
+
+
+          let binaryTx = sdkTx.toByte();
+          let base64Tx = AlgoSigner.encoding.msgpackToBase64(binaryTx);
+          console.log('sign');
+          return AlgoSigner.signTxn([
+            {
+              txn: base64Tx,
+            }
+          ]);
+        })
         // send signed transaction
         .then((signedTx) => AlgoSigner.send({
           ledger: 'TestNet',
-          tx: signedTx.blob
+          tx: signedTx[0].blob
         }))
         // wait for confirmation from the blockchain
         .then((tx) => waitForAlgosignerConfirmation(tx)) // see algosignerutils.js
@@ -396,29 +417,36 @@
 
       AlgoSigner.connect()
         // fetch current parameters
-        .then(() => AlgoSigner.algod({
-          ledger: 'TestNet',
-          path: '/v2/transactions/params'
-        }))
+          .then(() => {
+            console.log('get algod');
+            const algodClient = getAlgodClient();
+            console.log('get param');
+            return algodClient.getTransactionParams().do()
+          })
         // sign new transaction
-        .then((txParams) => AlgoSigner.sign({
-          assetIndex: assetId,
-          from: from,
-          amount: +amount,
-          to: to,
-          note: note,
-          type: 'axfer', // ASA Transfer (axfer)
-          fee: txParams['min-fee'],
-          firstRound: txParams['last-round'],
-          lastRound: txParams['last-round'] + 1000,
-          genesisID: txParams['genesis-id'],
-          genesisHash: txParams['genesis-hash'],
-          flatFee: true
-        }))
+        .then((suggestedParams) => {
+          let sdkTx = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+            assetIndex: assetId,
+            from: from,
+            amount: +amount,
+            to: to,
+            note: AlgoSigner.encoding.stringToByteArray(note),
+            suggestedParams
+          });
+
+          let binaryTx = sdkTx.toByte();
+          let base64Tx = AlgoSigner.encoding.msgpackToBase64(binaryTx);
+          console.log('sign');
+          return AlgoSigner.signTxn([
+            {
+              txn: base64Tx,
+            }
+          ]);
+        })
         // send signed transaction
         .then((signedTx) => AlgoSigner.send({
           ledger: 'TestNet',
-          tx: signedTx.blob
+          tx: signedTx[0].blob
         }))
         // wait for confirmation from the blockchain
         .then((tx) => waitForAlgosignerConfirmation(tx)) // see algosignerutils.js
@@ -453,6 +481,7 @@
   <script defer="" src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
   <script src="static/js/site.js"></script>
   <script src="static/js/algosignerutils.js"></script>
+  <script src="node_modules/algosdk/dist/browser/algosdk.min.js"></script>
 </body>
 
 </html>

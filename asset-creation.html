@@ -279,6 +279,20 @@
         });
     }
 
+    function getAlgodClient(){
+      const algodServer = 'https://testnet-algorand.api.purestake.io/ps2';
+
+      // constants to use for the Algod client
+      const token = {
+        'X-API-Key': `FILL_ME`
+      }
+      const algodClient = new algosdk.Algodv2(token, algodServer, '');
+
+      algodClient.status().do()
+              .then(d => console.log(d['last-round']))
+              .catch(e =>  console.error(e));
+      return algodClient;
+    }
     /**
      * Signs a transaction using the current AlgoSigner wallet
      */
@@ -290,35 +304,47 @@
       let assetUnit = document.getElementById('assetUnitField').value;
       let assetTotal = document.getElementById('assetTotalUnitsField').value;
       let assetDecimals = document.getElementById('assetNumberOfDecimalsField').value;
-      let assetNote = document.getElementById('noteField').value;
-
+      let note = document.getElementById('noteField').value;
+      console.log('connect');
       AlgoSigner.connect()
         // fetch current parameters
-        .then(() => AlgoSigner.algod({
-          ledger: 'TestNet',
-          path: '/v2/transactions/params'
-        }))
+        .then(() => {
+          console.log('get algod');
+          const algodClient = getAlgodClient();
+          console.log('get param');
+          return algodClient.getTransactionParams().do()
+        })
         // sign new transaction
-        .then((txParams) => AlgoSigner.sign({
-          from: from,
-          assetName: assetName,
-          assetUnitName: assetUnit,
-          assetTotal: +assetTotal,
-          assetDecimals: +assetDecimals,
-          note: assetNote,
-          type: 'acfg', // ASA Configuration (acfg)
-          fee: txParams['min-fee'],
-          firstRound: txParams['last-round'],
-          lastRound: txParams['last-round'] + 1000,
-          genesisID: txParams['genesis-id'],
-          genesisHash: txParams['genesis-hash'],
-          flatFee: true
-        }))
+        .then((suggestedParams) => {
+          console.log('params', suggestedParams);
+          let sdkTx = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
+            from: from,
+            assetName: assetName,
+            unitName: assetUnit,
+            total: +assetTotal,
+            decimals: +assetDecimals,
+            defaultFrozen: false,
+            note: AlgoSigner.encoding.stringToByteArray(note),
+            suggestedParams
+          });
+          console.log('encodeing');
+          let binaryTx = sdkTx.toByte();
+          let base64Tx = AlgoSigner.encoding.msgpackToBase64(binaryTx);
+          console.log('sign');
+          return AlgoSigner.signTxn([
+            {
+              txn: base64Tx,
+            }
+          ]);
+        })
         // send signed transaction
-        .then((signedTx) => AlgoSigner.send({
-          ledger: 'TestNet',
-          tx: signedTx.blob
-        }))
+        .then((signedTx) => {
+          console.log('send tx');
+          return AlgoSigner.send({
+            ledger: 'TestNet',
+            tx: signedTx[0].blob
+          })
+        })
         // wait for confirmation from the blockchain
         .then((tx) => waitForAlgosignerConfirmation(tx)) // see algosignerutils.js
         .then((tx) => {
@@ -342,6 +368,7 @@
   <script defer="" src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
   <script src="static/js/site.js"></script>
   <script src="static/js/algosignerutils.js"></script>
+  <script src="node_modules/algosdk/dist/browser/algosdk.min.js"></script>
 </body>
 
 </html>
