@@ -26,3 +26,6 @@ Note: this demo focuses almost entirely on the Algorand smart contract workflow.
 ## License
 
 algo-html-demo is licensed under the MIT license. See the [LICENSE](https://github.com/jwdixon/algo-html-demo/blob/main/LICENSE) file for details.
+
+
+TEST
